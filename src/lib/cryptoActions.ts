@@ -1,4 +1,4 @@
-// src/lib/cryptoActions.ts
+// lib/cryptoActions.ts
 import { supabase } from '@/lib/supabaseClient';
 import axios from 'axios';
 
@@ -35,7 +35,7 @@ const getCoinSymbol = async (coinId: number): Promise<string | null> => {
 
 export const buyCrypto = async (
     user: any,
-    balance: number | null,
+    balance: number,
     setBalance: (balance: number) => void,
     coinId: number,
     amount: number
@@ -48,11 +48,6 @@ export const buyCrypto = async (
     const price = await fetchCryptoPrice(symbol);
     if (!price) {
         alert("Nie udało się pobrać ceny kryptowaluty.");
-        return;
-    }
-
-    if (balance === null) {
-        console.error('Brak salda użytkownika!');
         return;
     }
 
@@ -75,7 +70,7 @@ export const buyCrypto = async (
         return;
     }
 
-    const { data: existingCoin, error } = await supabase
+    const { data: existingCoin, error: portfolioError } = await supabase
         .from('user_portfolio')
         .select('amount')
         .eq('user_id', user.id)
@@ -99,12 +94,12 @@ export const buyCrypto = async (
         .insert([{ user_id: user.id, cryptocurrency_id: coinId, amount, price, type: 'buy' }]);
 
     setBalance(newBalance);
-    alert(`Kupiono ${amount} ${symbol} za $${totalCost.toFixed(2)}`);
+    alert(`Kupiono ${amount} ${symbol.toUpperCase()} za $${totalCost.toFixed(2)}`);
 };
 
 export const sellCrypto = async (
     user: any,
-    balance: number | null,
+    balance: number,
     setBalance: (balance: number) => void,
     portfolio: any[],
     coinId: number,
@@ -124,11 +119,6 @@ export const sellCrypto = async (
     const userCoin = portfolio.find(c => c.cryptocurrency_id === coinId);
     if (!userCoin || userCoin.amount < amount) {
         alert("Brak wystarczającej ilości kryptowaluty!");
-        return;
-    }
-
-    if (balance === null) {
-        console.error('Brak salda użytkownika!');
         return;
     }
 
@@ -164,5 +154,5 @@ export const sellCrypto = async (
         .insert([{ user_id: user.id, cryptocurrency_id: coinId, amount, price, type: 'sell' }]);
 
     setBalance(newBalance);
-    alert(`Sprzedano ${amount} ${symbol} za $${totalGain.toFixed(2)}`);
+    alert(`Sprzedano ${amount} ${symbol.toUpperCase()} za $${totalGain.toFixed(2)}`);
 };
