@@ -1,4 +1,3 @@
-// lib/cryptoActions.ts
 import { supabase } from '@/lib/supabaseClient';
 import axios from 'axios';
 
@@ -52,7 +51,6 @@ export const buyCrypto = async (
     }
 
     const totalCost = amount * price;
-
     if (balance < totalCost) {
         alert("Brak wystarczających środków!");
         return;
@@ -70,7 +68,7 @@ export const buyCrypto = async (
         return;
     }
 
-    const { data: existingCoin } = await supabase
+    const { data: existingCoin, error } = await supabase
         .from('user_portfolio')
         .select('amount')
         .eq('user_id', user.id)
