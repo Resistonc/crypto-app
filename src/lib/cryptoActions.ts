@@ -40,7 +40,7 @@ export const buyCrypto = async (
     coinId: number,
     amount: number
 ) => {
-    if (!user) return;
+    if (!user || balance === null) return;
 
     const symbol = await getCoinSymbol(coinId);
     if (!symbol) return;
@@ -53,17 +53,24 @@ export const buyCrypto = async (
 
     const totalCost = amount * price;
 
-    if (balance !== null && balance < totalCost) {
+    if (balance < totalCost) {
         alert("Brak wystarczających środków!");
         return;
     }
 
-    await supabase
+    const newBalance = balance - totalCost;
+
+    const { error: balanceError } = await supabase
         .from('user_profiles')
-        .update({ balance: balance - totalCost })
+        .update({ balance: newBalance })
         .eq('user_id', user.id);
 
-    const { data: existingCoin, error } = await supabase
+    if (balanceError) {
+        console.error("Błąd aktualizacji salda:", balanceError);
+        return;
+    }
+
+    const { data: existingCoin } = await supabase
         .from('user_portfolio')
         .select('amount')
         .eq('user_id', user.id)
@@ -86,7 +93,7 @@ export const buyCrypto = async (
         .from('transactions')
         .insert([{ user_id: user.id, cryptocurrency_id: coinId, amount, price, type: 'buy' }]);
 
-    setBalance(balance - totalCost);
+    setBalance(newBalance);
     alert(`Kupiono ${amount} ${symbol} za $${totalCost.toFixed(2)}`);
 };
 
@@ -98,7 +105,7 @@ export const sellCrypto = async (
     coinId: number,
     amount: number
 ) => {
-    if (!user) return;
+    if (!user || balance === null) return;
 
     const symbol = await getCoinSymbol(coinId);
     if (!symbol) return;
@@ -116,11 +123,17 @@ export const sellCrypto = async (
     }
 
     const totalGain = amount * price;
+    const newBalance = balance + totalGain;
 
-    await supabase
+    const { error: balanceError } = await supabase
         .from('user_profiles')
-        .update({ balance: balance + totalGain })
+        .update({ balance: newBalance })
         .eq('user_id', user.id);
+
+    if (balanceError) {
+        console.error("Błąd aktualizacji salda:", balanceError);
+        return;
+    }
 
     if (userCoin.amount - amount > 0) {
         await supabase
@@ -140,6 +153,6 @@ export const sellCrypto = async (
         .from('transactions')
         .insert([{ user_id: user.id, cryptocurrency_id: coinId, amount, price, type: 'sell' }]);
 
-    setBalance(balance + totalGain);
+    setBalance(newBalance);
     alert(`Sprzedano ${amount} ${symbol} za $${totalGain.toFixed(2)}`);
 };
