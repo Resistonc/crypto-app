@@ -1,3 +1,4 @@
+// src/lib/cryptoActions.ts
 import { supabase } from '@/lib/supabaseClient';
 import axios from 'axios';
 
@@ -39,7 +40,7 @@ export const buyCrypto = async (
     coinId: number,
     amount: number
 ) => {
-    if (!user || balance === null) return;
+    if (!user) return;
 
     const symbol = await getCoinSymbol(coinId);
     if (!symbol) return;
@@ -50,7 +51,13 @@ export const buyCrypto = async (
         return;
     }
 
+    if (balance === null) {
+        console.error('Brak salda użytkownika!');
+        return;
+    }
+
     const totalCost = amount * price;
+
     if (balance < totalCost) {
         alert("Brak wystarczających środków!");
         return;
@@ -103,7 +110,7 @@ export const sellCrypto = async (
     coinId: number,
     amount: number
 ) => {
-    if (!user || balance === null) return;
+    if (!user) return;
 
     const symbol = await getCoinSymbol(coinId);
     if (!symbol) return;
@@ -117,6 +124,11 @@ export const sellCrypto = async (
     const userCoin = portfolio.find(c => c.cryptocurrency_id === coinId);
     if (!userCoin || userCoin.amount < amount) {
         alert("Brak wystarczającej ilości kryptowaluty!");
+        return;
+    }
+
+    if (balance === null) {
+        console.error('Brak salda użytkownika!');
         return;
     }
 
