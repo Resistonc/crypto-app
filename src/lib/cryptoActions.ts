@@ -10,6 +10,7 @@ const fetchCryptoPrice = async (symbol: string): Promise<number | null> => {
         vs_currencies: 'usd',
       },
     });
+
     return response.data[symbol.toLowerCase()]?.usd || null;
   } catch (error) {
     console.error(`Błąd pobierania ceny ${symbol}:`, error);
@@ -39,7 +40,7 @@ export const buyCrypto = async (
   coinId: number,
   amount: number
 ) => {
-  if (!user || balance === null) return;
+  if (!user) return;
 
   const symbol = await getCoinSymbol(coinId);
   if (!symbol) return;
@@ -51,6 +52,11 @@ export const buyCrypto = async (
   }
 
   const totalCost = amount * price;
+
+  if (balance === null) {
+    console.error('Saldo użytkownika nie zostało załadowane.');
+    return;
+  }
 
   if (balance < totalCost) {
     alert("Brak wystarczających środków!");
@@ -69,7 +75,7 @@ export const buyCrypto = async (
     return;
   }
 
-  const { data: existingCoin } = await supabase
+  const { data: existingCoin, error } = await supabase
     .from('user_portfolio')
     .select('amount')
     .eq('user_id', user.id)
@@ -104,7 +110,7 @@ export const sellCrypto = async (
   coinId: number,
   amount: number
 ) => {
-  if (!user || balance === null) return;
+  if (!user) return;
 
   const symbol = await getCoinSymbol(coinId);
   if (!symbol) return;
@@ -118,6 +124,11 @@ export const sellCrypto = async (
   const userCoin = portfolio.find(c => c.cryptocurrency_id === coinId);
   if (!userCoin || userCoin.amount < amount) {
     alert("Brak wystarczającej ilości kryptowaluty!");
+    return;
+  }
+
+  if (balance === null) {
+    console.error('Saldo użytkownika nie zostało załadowane.');
     return;
   }
 
