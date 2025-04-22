@@ -1,6 +1,7 @@
 import "@/app/globals.css";
 import type { AppProps } from "next/app";
 import { Baumans } from "next/font/google";
+import { AuthProvider } from "@/context/authContext";
 
 const baumans = Baumans({
   weight: ["400"],
@@ -8,7 +9,7 @@ const baumans = Baumans({
 });
 
 const FontLoader = () => (
-  // @ts-ignore
+
   <style jsx global>
     {`
       :root {
@@ -20,9 +21,9 @@ const FontLoader = () => (
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
-    <>
+    <AuthProvider>
       <FontLoader />
       <Component {...pageProps} />
-    </>
+    </AuthProvider>
   );
 }

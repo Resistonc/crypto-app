@@ -8,7 +8,7 @@ interface Props {
 const ComContainer: React.FC<Props> = ({ value, login }) => {
   return (
     <div
-      className="flex items-center justify-center  pt-14 px-10 pb-14 grid grid-center grid-cols-1 grid-flow-cols"
+      className="flex items-center justify-center  pt-14 px-10 pb-14 grid-center grid-cols-1 grid-flow-cols"
       style={{
         backgroundColor: "white",
         backgroundSize: "cover",
