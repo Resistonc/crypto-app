@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { supabase } from '@/lib/supabaseClient';
 import {
   LineChart,
   Line,
@@ -21,7 +22,6 @@ const MyChart: React.FC<MyChartProps> = ({ selectedCrypto }) => {
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [priceChange, setPriceChange] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -44,30 +44,45 @@ const MyChart: React.FC<MyChartProps> = ({ selectedCrypto }) => {
         }));
         setData(prices);
       } catch (error) {
-        setError('Błąd podczas pobierania danych. Spróbuj ponownie.');
+        setError('Błąd podczas pobierania danych wykresu.');
       } finally {
         setLoading(false);
       }
     };
 
-    const fetchCurrentPrice = async () => {
+    const fetchCurrentPriceFromDb = async () => {
       try {
-        const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price`, {
-          params: {
-            ids: selectedCrypto,
-            vs_currencies: 'usd',
-            include_24hr_change: 'true'
-          }
-        });
-        setCurrentPrice(response.data[selectedCrypto].usd);
-        setPriceChange(response.data[selectedCrypto].usd_24h_change);
+        const { data: crypto, error: cryptoError } = await supabase
+          .from('cryptocurrencies')
+          .select('id')
+          .eq('name', selectedCrypto)
+          .single();
+
+        if (cryptoError || !crypto) {
+          setError('Nie znaleziono kryptowaluty w bazie.');
+          return;
+        }
+
+        const { data: priceData, error: priceError } = await supabase
+          .from('crypto_prices')
+          .select('price')
+          .eq('cryptocurrency_id', crypto.id)
+          .order('fetched_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (priceError || !priceData) {
+          setError('Nie znaleziono aktualnej ceny w bazie.');
+        } else {
+          setCurrentPrice(priceData.price);
+        }
       } catch (error) {
-        setError('Błąd podczas pobierania aktualnej ceny.');
+        setError('Błąd podczas pobierania ceny z bazy danych.');
       }
     };
 
     fetchData();
-    fetchCurrentPrice();
+    fetchCurrentPriceFromDb();
   }, [selectedCrypto, days]);
 
   const formatYAxis = (tickItem: number) => `$${tickItem.toFixed(2)}`;
@@ -83,14 +98,9 @@ const MyChart: React.FC<MyChartProps> = ({ selectedCrypto }) => {
         </select>
       </div>
       <div className="mb-4 text-xl">
-        <p>Aktualna cena: {currentPrice ? `$${currentPrice.toFixed(2)}` : 'Ładowanie...'}</p>
-        {priceChange !== null && (
-          <p className={priceChange >= 0 ? 'text-green-500' : 'text-red-500'}>
-            Zmiana 24h: {priceChange.toFixed(2)}%
-          </p>
-        )}
+        <p>Aktualna cena: {currentPrice !== null ? `$${currentPrice.toFixed(2)}` : 'Ładowanie...'}</p>
       </div>
-      {loading && <p>Ładowanie danych...</p>}
+      {loading && <p>Ładowanie danych wykresu...</p>}
       {error && <p className="text-red-500">{error}</p>}
       {!loading && !error && (
         <ResponsiveContainer width="90%" height={400}>

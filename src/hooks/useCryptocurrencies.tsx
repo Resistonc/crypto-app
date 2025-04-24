@@ -7,8 +7,13 @@ interface Crypto {
   symbol: string;
 }
 
+
+
+
+
 export const useCryptocurrencies = () => {
   const [cryptos, setCryptos] = useState<Crypto[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchCryptos = async () => {
@@ -18,6 +23,7 @@ export const useCryptocurrencies = () => {
       } else {
         console.error("Error fetching cryptos:", error);
       }
+      setLoading(false);
     };
 
     fetchCryptos();

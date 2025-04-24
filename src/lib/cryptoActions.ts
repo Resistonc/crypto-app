@@ -1,21 +1,4 @@
 import { supabase } from '@/lib/supabaseClient';
-import axios from 'axios';
-
-const fetchCryptoPrice = async (symbol: string): Promise<number | null> => {
-  try {
-    const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price`, {
-      params: {
-        ids: symbol.toLowerCase(),
-        vs_currencies: 'usd',
-      },
-    });
-
-    return response.data[symbol.toLowerCase()]?.usd || null;
-  } catch (error) {
-    console.error(`Błąd pobierania ceny ${symbol}:`, error);
-    return null;
-  }
-};
 
 const getCoinSymbol = async (coinId: number): Promise<string | null> => {
   const { data, error } = await supabase
@@ -32,6 +15,23 @@ const getCoinSymbol = async (coinId: number): Promise<string | null> => {
   return data.symbol.toLowerCase();
 };
 
+const fetchCryptoPrice = async (coinId: number): Promise<number | null> => {
+  const { data, error } = await supabase
+    .from('crypto_prices')
+    .select('price')
+    .eq('cryptocurrency_id', coinId)
+    .order('fetched_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    console.error("Błąd pobierania ceny kryptowaluty z bazy:", error);
+    return null;
+  }
+
+  return data.price;
+};
+
 export const buyCrypto = async (
   user: any,
   balance: number | null,
@@ -41,17 +41,21 @@ export const buyCrypto = async (
 ) => {
   if (!user || balance === null) return;
 
-  const symbol = await getCoinSymbol(coinId);
-  if (!symbol) return;
+  console.log("🔹 START BUY:", { userId: user.id, coinId, amount });
 
-  const price = await fetchCryptoPrice(symbol);
+  const symbol = await getCoinSymbol(coinId);
+  if (!symbol) {
+    console.error("❌ Symbol nie znaleziony");
+    return;
+  }
+
+  const price = await fetchCryptoPrice(coinId);
   if (!price) {
     alert("Nie udało się pobrać ceny kryptowaluty.");
     return;
   }
 
   const totalCost = amount * price;
-
   if (balance < totalCost) {
     alert("Brak wystarczających środków!");
     return;
@@ -65,36 +69,65 @@ export const buyCrypto = async (
     .eq('user_id', user.id);
 
   if (balanceError) {
-    console.error("Błąd aktualizacji salda:", balanceError);
+    console.error("❌ Błąd aktualizacji salda:", balanceError);
     return;
   }
 
-  const { data: existingCoin, error } = await supabase
+  // ➕ Sprawdzenie czy rekord istnieje
+  const { data: existingCoin, error: selectError } = await supabase
     .from('user_portfolio')
     .select('amount')
     .eq('user_id', user.id)
     .eq('cryptocurrency_id', coinId)
-    .single();
+    .maybeSingle();
+
+  console.log("🔍 Istniejący rekord:", existingCoin);
+
+  if (selectError) {
+    console.error("❌ Błąd select user_portfolio:", selectError);
+    return;
+  }
 
   if (existingCoin) {
-    await supabase
+    const { error: updateError } = await supabase
       .from('user_portfolio')
       .update({ amount: existingCoin.amount + amount })
       .eq('user_id', user.id)
       .eq('cryptocurrency_id', coinId);
+
+    if (updateError) {
+      console.error("❌ Błąd update user_portfolio:", updateError);
+      return;
+    }
+
+    console.log("✅ Zaktualizowano istniejący rekord");
   } else {
-    await supabase
+    const { error: insertError } = await supabase
       .from('user_portfolio')
       .insert([{ user_id: user.id, cryptocurrency_id: coinId, amount }]);
+
+    if (insertError) {
+      console.error("❌ Błąd insert user_portfolio:", insertError);
+      return;
+    }
+
+    console.log("✅ Dodano nowy rekord do user_portfolio");
   }
 
-  await supabase
+  const { error: transactionError } = await supabase
     .from('transactions')
     .insert([{ user_id: user.id, cryptocurrency_id: coinId, amount, price, type: 'buy' }]);
 
-  setBalance(balance! - totalCost);
+  if (transactionError) {
+    console.error("❌ Błąd zapisu transakcji:", transactionError);
+    return;
+  }
+
+  setBalance(newBalance);
   alert(`Kupiono ${amount} ${symbol} za $${totalCost.toFixed(2)}`);
 };
+
+  
 
 export const sellCrypto = async (
   user: any,
@@ -109,13 +142,13 @@ export const sellCrypto = async (
   const symbol = await getCoinSymbol(coinId);
   if (!symbol) return;
 
-  const price = await fetchCryptoPrice(symbol);
+  const price = await fetchCryptoPrice(coinId);
   if (!price) {
     alert("Nie udało się pobrać ceny kryptowaluty.");
     return;
   }
 
-  const userCoin = portfolio.find(c => c.cryptocurrency_id === coinId);
+  const userCoin = portfolio.find(c => c.cryptocurrency.id === coinId);
   if (!userCoin || userCoin.amount < amount) {
     alert("Brak wystarczającej ilości kryptowaluty!");
     return;
@@ -125,7 +158,7 @@ export const sellCrypto = async (
 
   await supabase
     .from('user_profiles')
-    .update({ balance: balance! + totalGain })
+    .update({ balance: balance + totalGain })
     .eq('user_id', user.id);
 
   if (userCoin.amount - amount > 0) {
@@ -146,6 +179,6 @@ export const sellCrypto = async (
     .from('transactions')
     .insert([{ user_id: user.id, cryptocurrency_id: coinId, amount, price, type: 'sell' }]);
 
-  setBalance(balance! + totalGain);
+  setBalance(balance + totalGain);
   alert(`Sprzedano ${amount} ${symbol} za $${totalGain.toFixed(2)}`);
 };
