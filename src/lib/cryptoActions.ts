@@ -51,13 +51,13 @@ export const buyCrypto = async (
 
   const price = await fetchCryptoPrice(coinId);
   if (!price) {
-    alert("Nie udało się pobrać ceny kryptowaluty.");
+    console.error("❌ Błąd pobierania ceny kryptowaluty.");
     return;
   }
 
   const totalCost = amount * price;
   if (balance < totalCost) {
-    alert("Brak wystarczających środków!");
+    console.error("❌ Brak wystarczających środków!");
     return;
   }
 
@@ -72,6 +72,8 @@ export const buyCrypto = async (
     console.error("❌ Błąd aktualizacji salda:", balanceError);
     return;
   }
+
+  console.log("✅ Zaktualizowano saldo użytkownika");
 
   // ➕ Sprawdzenie czy rekord istnieje
   const { data: existingCoin, error: selectError } = await supabase
@@ -124,8 +126,8 @@ export const buyCrypto = async (
   }
 
   setBalance(newBalance);
-  alert(`Kupiono ${amount} ${symbol} za $${totalCost.toFixed(2)}`);
 };
+
 
   
 

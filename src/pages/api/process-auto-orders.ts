@@ -1,4 +1,3 @@
-// /pages/api/process-auto-orders.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/lib/supabaseClient';
 import { buyCrypto } from '@/lib/cryptoActions';
@@ -20,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: orders, error: orderError } = await supabase
       .from('auto_orders')
       .select('*')
-      .is('executed_at', null);
+      .eq('executed', false); // Filtruj tylko te, które nie zostały wykonane
 
     if (orderError || !orders) {
       console.error('❌ Błąd pobierania zleceń:', orderError);
@@ -31,13 +30,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     for (const order of orders) {
       const current = prices.find(p => p.cryptocurrency_id === order.cryptocurrency_id)?.price;
-      console.log(`🔎 Sprawdzam zlecenie ${order.id}: current=${current}, target=${order.target_price}`);
+      console.log(`➡️ Sprawdzam zlecenie ${order.id}: cena docelowa $${order.target_price}, aktualna $${current}`);
 
       if (!current || current > order.target_price) {
-        console.log(`⏭️ Pomijam zlecenie ${order.id} – cena zbyt wysoka`);
+        console.log(`⏩ Pomijam zlecenie ${order.id} (cena za wysoka)`);
         continue;
       }
 
+      // 3. Pobierz dane użytkownika
       const { data: userProfile, error: userError } = await supabase
         .from('user_profiles')
         .select('balance')
@@ -45,37 +45,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (userError || !userProfile) {
-        console.error(`❌ Błąd pobierania użytkownika ${order.user_id}:`, userError);
+        console.error(`❌ Nie znaleziono profilu użytkownika ${order.user_id}`, userError);
         continue;
       }
 
       const balance = userProfile.balance;
 
-      await buyCrypto(
-        { id: order.user_id },
-        balance,
-        () => {},
-        order.cryptocurrency_id,
-        order.amount
-      );
+      // 4. Przeprowadź zakup
+      try {
+        await buyCrypto(
+          { id: order.user_id },
+          balance,
+          () => {}, // setBalance – pomijamy
+          order.cryptocurrency_id,
+          order.amount
+        );
+      } catch (e) {
+        console.error(`❌ Błąd wykonania zakupu dla zlecenia ${order.id}:`, e);
+        continue;
+      }
 
-      const { error: updateError } = await supabase
+      // 5. Zaktualizuj zlecenie jako wykonane
+      const { data: updatedOrder, error: updateError } = await supabase
         .from('auto_orders')
-        .update({ executed_at: new Date().toISOString() })
-        .eq('id', order.id);
+        .update({ executed: true })
+        .eq('id', order.id)
+        .single(); // Dodajemy .single(), by zwrócić tylko jeden rekord
 
       if (updateError) {
         console.error(`❌ Błąd aktualizacji zlecenia ${order.id}:`, updateError);
         continue;
-      }
+      } else {
+        executedCount++;
+        console.log(`✅ Zlecenie ${order.id} zostało wykonane`);
 
-      executedCount++;
-      console.log(`✅ Wykonano zlecenie ${order.id}`);
+        // Sprawdź, czy zaktualizowany rekord ma executed = true
+        console.log(`Updated Order:`, updatedOrder);
+
+        // Usuwamy zlecenie z bazy
+        await supabase
+          .from('auto_orders')
+          .delete()
+          .eq('id', order.id);
+
+        console.log(`❌ Zlecenie ${order.id} zostało usunięte`);
+      }
     }
 
     return res.status(200).json({ success: true, executed: executedCount });
   } catch (err) {
-    console.error('Błąd automatycznego zlecenia:', err);
+    console.error('❌ Błąd główny:', err);
     return res.status(500).json({ success: false, error: err });
   }
 }
